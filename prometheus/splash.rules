@@ -1,0 +1,44 @@
+groups:
+  - name: Splash
+    rules:
+      - alert: log_too_many_lines
+        for: 30s
+        expr: loglines > 10000
+        labels:
+          object_class: SPLASH_LOG
+          type: Logs
+        annotations:
+          severity: CRITICAL
+          env: PROD
+          instance: " {{ $labels.exported_instance }}"
+          state: oversized
+          alertname: "Too many lines in log in {{ $labels.log }}"
+          description: "Too many lines in log in {{ $labels.log }} nb lines : {{ $value }}"
+          
+      - alert: error_in_log
+        for: 30s
+        expr: increase(logerrors[5m]) > 0
+        labels:
+          object_class: SPLASH_LOG
+          type: Logs
+        annotations:
+          severity: CRITICAL
+          env: PROD
+          instance: " {{ $labels.exported_instance }}"
+          state: oversized
+          alertname: "Error pattern found in log {{ $labels.log }}"
+          description: "Error pattern found in log {{ $labels.log }} nb lines : {{ $value }}"
+
+      - alert: missing logs
+        for: 30s
+        expr: logmissing > 0
+        labels:
+          object_class: SPLASH_LOG
+          type: Logs
+        annotations:
+          severity: CRITICAL
+          env: PROD
+          instance: " {{ $labels.exported_instance }}"
+          state: oversized
+          alertname: "Log file not found {{ $labels.log }}"
+          description: "Log file not found {{ $labels.log }}"

@@ -1,0 +1,144 @@
+version: '3.7'
+
+
+networks:
+  monitoring:
+
+volumes:
+  grafana_data:
+  prometheus_data:
+
+services:
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor
+    command:
+      - '-port=9999'
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - monitoring
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.prometheus.entrypoints=web
+      - traefik.http.routers.prometheus.rule=Host(`prometheus.localhost`)
+      - traefik.http.services.prometheus.loadbalancer.server.port=9090
+      - traefik.http.routers.prometheus.middlewares=traefik-auth
+      
+
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    volumes:
+      - type: bind
+        source: ./alertmanager/
+        target: /etc/alertmanager/
+    networks:
+      - monitoring
+    restart: always
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.alertmanager.entrypoints=web
+      - traefik.http.routers.alertmanager.rule=Host(`alertmanager.localhost`)
+      - traefik.http.services.alertmanager.loadbalancer.server.port=9093
+      - traefik.http.routers.alertmanager.middlewares=traefik-auth
+
+  pushgateway:
+    image: prom/pushgateway:latest
+    ports:
+        - 9091:9091
+    networks:
+      - monitoring
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.pushgateway.entrypoints=web
+      - traefik.http.routers.pushgateway.rule=Host(`pushgateway.localhost`)
+      - traefik.http.services.pushgateway.loadbalancer.server.port=9091
+      - traefik.http.routers.pushgateway.middlewares=traefik-auth
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - monitoring
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grafana.entrypoints=web
+      - traefik.http.routers.grafana.rule=Host(`grafana.localhost`)
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+
+  node:
+    image: prom/node-exporter
+    command:
+      - '--collector.textfile.directory=/etc/node-exporter/'
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.systemd'
+      - '--collector.systemd.unit-whitelist=.+\.service'
+    volumes:
+      - /etc/hostname:/etc/nodename
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket
+    networks:
+      - monitoring
+
+  traefik:
+    image: traefik:latest
+    command:
+      - --api.insecure=true
+      - --api.dashboard=true 
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=monitoring
+      - --entrypoints.web.address=:80
+      - --metrics.prometheus=true
+    ports:
+      - "80:80"
+    networks:
+      - monitoring
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels: 
+    - traefik.enable=true
+    - traefik.http.routers.traefik.entrypoints=web
+    - traefik.http.routers.traefik.rule=Host(`traefik.localhost`)
+    - traefik.http.services.traefik.loadbalancer.server.port=8080
+    - traefik.http.middlewares.traefik-auth.basicauth.users=admin:$$apr1$$xHiocTzm$$1srppVVHyZzMZExDJ7qhH/
+
+
+  portal:
+    image: nginx
+    networks:
+      - monitoring
+    volumes:
+      - ./portal:/usr/share/nginx/html
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.portal.entrypoints=web
+      - traefik.http.routers.portal.rule=Host(`portal.localhost`)
+
+  tracer:
+    image: tracer:latest
+    networks:
+      - monitoring
+    volumes:
+      - /tmp:/tmp
+    ports:
+      - "3000:3000" 
