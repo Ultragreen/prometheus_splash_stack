@@ -1,0 +1,193 @@
+---
+:splash:
+  :paths:
+    :pid_path: "/var/run/splash"
+    :trace_path: "/var/run/splash/traces"
+  :loggers:
+    :level: :info
+    :daemon:
+      :file: "/var/log/splash.log"
+    :cli:
+      :emoji: true
+      :color: true
+  :templates:
+    :execution:
+      :path: "/etc/splash_execution_report.tpl"
+  :backends:
+    :stores:
+      :execution_trace:
+        :type: :file
+        :path: "/var/run/splash/executions"
+      :transfers_trace:
+        :type: :file
+        :path: "/var/run/splash/transfers"
+      :logs_trace:
+        :type: :file
+        :path: "/var/run/splash/logs"
+      :process_trace:
+        :type: :file
+        :path: "/var/run/splash/process"
+  :transports:
+    :active: :rabbitmq
+    :rabbitmq:
+      :vhost: "/"
+      :port: 5672
+      :host: rabbitmq
+  :daemon:
+    :logmon_scheduling:
+      :every: 20s
+    :metrics_scheduling:
+      :every: 15s
+    :procmon_scheduling:
+      :every: 20s
+    :process_name: 'Splash : daemon.'
+    :files:
+      :stdout_trace: stdout.txt
+      :stderr_trace: stderr.txt
+      :pid_file: splash.pid
+  :prometheus:
+    :pushgateway: http://pushgateway:9091
+    :url: http://prometheus:9090
+    :alertmanager: http://alertmanager:9093
+  :webadmin:
+    :port: 9234
+    :ip: 127.0.0.1
+    :proxy: false
+    :process_name: 'Splash : WebAdmin.'
+    :files:
+      :stdout_trace: stdout_webadmin.txt
+      :stderr_trace: stderr_webadmin.txt
+      :pid_file: splash_webadmin.pid
+  :commands:
+  - :name: :id_root
+    :desc: run id command on root
+    :command: id root
+  - :name: :true_test
+    :desc: 'test command returning true : 0'
+    :command: 'true'
+    :schedule:
+      :every: 1h
+    :on_failure: :ls_slash_tmp
+    :on_success: :pwd
+  - :name: :false_test
+  - :name: :false_test
+    :desc: test command returning false > 0
+    :command: 'false'
+    :schedule:
+      :every: 1h
+    :on_failure: :ls_slash_tmp
+    :on_success: :pwd
+  - :name: :ls_slash_tmp
+    :desc: list file in /tmp
+    :command: ls -al /tmp
+    :user: daemon
+    :on_success: :echo1
+  - :name: :pwd
+    :desc: run pwd
+    :command: pwd
+    :on_success: :echo1
+    :on_failure: :echo2
+  - :name: :echo1
+    :desc: echo 'foo'
+    :command: echo foo
+    :on_failure: :echo3
+  - :name: :echo2
+    :desc: echo 'bar'
+    :command: echo bar
+  - :name: :echo3
+    :desc: echo 'been'
+    :command: echo been
+  - :name: :rand_sleep_5
+    :desc: sleep on a rand 5
+    :command: ruby -e 'sleep rand(5)'
+    :schedule:
+      :every: 30s
+    :retention:
+      :hours: 1
+  - :name: :test_remote_call
+    :desc: remote call test
+    :delegate_to:
+      :host: omicron
+      :remote_command: :echo2
+    :on_success: :echo3
+  :logs:
+  - :label: :log_app_1
+    :log: "/tmp/test"
+    :pattern: ERROR
+    :retention:
+      :hours: 5
+  - :label: :log_app_2
+    :log: "/tmp/test2"
+    :pattern: ERROR
+    :retention:
+      :hours: 5
+  - :log: "/tmp/romain.txt"
+    :pattern: romain
+    :label: :testrge
+  :processes:
+  - :process: :cron
+    :patterns:
+    - cron
+    :retention:
+      :hours: 5
+  :sequences:
+    :sample_remote_sequence:
+      :definition:
+      - :step: execute echo2 on omicron
+        :command: :echo2
+        :on_host: omicron
+      - :step: run locally echo3
+        :command: :echo3
+        :trace: false
+    :sample_local_sequence:
+      :definition:
+      - :step: run locally pwd without callback
+        :command: :pwd
+        :callback: false
+      - :step: run locally echo3 without Prometheus notifications
+        :command: :echo3
+        :notify: false
+    :sample_local_failed_sequence:
+      :options:
+        :continue: false
+      :definition:
+      - :step: run false_test locally without callback
+        :command: :false_test
+        :callback: false
+      - :step: considere this as inefective
+        :command: :echo3
+    :sample_local_full_sequence:
+      :options:
+        :continue: true
+      :definition:
+      - :step: run false_test locally without callback
+        :command: :false_test
+        :callback: false
+        :trace: false
+      - :step: considere this as inefective
+        :command: :pwd
+    :sample_scheduled_sequence:
+      :schedule:
+        :every: 1m
+      :options:
+        :continue: true
+      :definition:
+      - :step: exec echo3
+        :command: :echo3
+  :transfers:
+  - :name: :transfer_text
+    :desc: List of text files
+    :pattern: "*.txt"
+    :backup: true
+    :type: :push
+    :retention:
+      :hours: 1
+    :local:
+      :path: "/tmp/transferts"
+      :user: root
+    :remote:
+      :user: root
+      :host: localhost
+      :path: "/tmp/"
+    :post:
+      :remote_command: ls
