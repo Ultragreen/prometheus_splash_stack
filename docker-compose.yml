@@ -148,21 +148,26 @@ services:
     image: redis:latest
     networks:
       - monitoring
+    ports:
+      - "6379:6379"
+
   rabbitmq:
     image: rabbitmq:latest
+    ports:
+      - "5672:5672"
     networks:
       - monitoring
 
-  splash:
-    image: splash:latest
-    volumes:
-      - type: bind
-        source: ./splash/splash.yml
-        target: /etc/splash.yml
-    build: ./splash
-    depends_on:
-      - rabbitmq
-      - pushgateway
-      - redis
-    networks:
-      - monitoring
+  # splash:
+  #   image: splash:latest
+  #   volumes:
+  #     - type: bind
+  #       source: ./splash/splash.yml
+  #       target: /etc/splash.yml
+  #   build: ./splash
+  #   depends_on:
+  #     - rabbitmq
+  #     - pushgateway
+  #     - redis
+  #   networks:
+  #     - monitoring
